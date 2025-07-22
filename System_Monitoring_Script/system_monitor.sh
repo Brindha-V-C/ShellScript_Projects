@@ -1,71 +1,105 @@
 #!/bin/bash
 
+# Simple System Health Monitor Script for Beginners
+# This script checks basic system information
 
-#About:  This is a script to monitor the system performance and to analyze the health of software and hardware
+echo "===================================="
+echo "    SYSTEM HEALTH CHECK REPORT"
+echo "===================================="
+echo "Date: $(date)"
+echo ""
 
+# 1. Check system information
+echo "--- BASIC SYSTEM INFO ---"
+echo "Computer name: $(hostname)"
+echo "Operating system: $(uname -s)"
+echo -e "OS Version:$(cat /etc/*-release | grep PRETTY_NAME | cut -d= -f2 | tr -d '"')"
+echo -e "Kernel:$(uname -r)"
+echo -e "Architecture:$(uname -m)"
+echo "How long system is running: $(uptime -p)"
+echo ""
 
-# Colors for output
-WHITE="\033[1;37m"
-CYAN="\033[1;36m"
-RESET="\033[0m"
+# 2. Check CPU usage
+echo "--- CPU USAGE ---"
+echo "Current CPU usage:"
+top -bn1 | grep "Cpu(s)" | awk '{print "CPU Usage: " $2}'
+echo ""
 
-log_file="/var/log/system_health_report.log"
+# 3. Check memory (RAM) usage  
+echo "--- MEMORY USAGE ---"
+echo "RAM Information:"
+free -h | grep "Mem:" | awk '{print "Total RAM: " $2 ", Used: " $3 ", Available: " $7}'
+echo ""
 
-echo -e "${WHITE}========== System Health Check Report ==========${RESET}"
-echo "Report generated at: $(date)" | tee -a $log_file
+# 4. Check disk space
+echo "--- DISK SPACE ---"
+echo "Hard drive space:"
+df -h / | grep "/" | awk '{print "Total: " $2 ", Used: " $3 ", Available: " $4 ", Usage: " $5}'
+echo ""
 
-## System Info
-echo -e "${CYAN}Hostname:${RESET}        $(hostname -f)"
-echo -e "${CYAN}Uptime:${RESET}          $(uptime -p)"
-echo -e "${CYAN}OS Version:${RESET}      $(cat /etc/*-release | grep PRETTY_NAME | cut -d= -f2 | tr -d '"')"
-echo -e "${CYAN}Kernel:${RESET}          $(uname -r)"
-echo -e "${CYAN}Architecture:${RESET}    $(uname -m)"
+# 5. Check top 3 programs using most CPU
+echo "--- TOP 3 PROGRAMS USING CPU ---"
+ps aux --sort=-%cpu | head -4 | tail -3 | awk '{print $11 " - " $3 "% CPU"}'
+echo ""
 
-## CPU Stats
-echo -e "${WHITE}\n--- CPU Usage ---${RESET}"
-mpstat | awk '$12 ~ /[0-9.]+/ { print "CPU Idle: " $12"%"; print "CPU Usage: "100-$12"%" }'
-echo -e "Load Average: $(uptime | awk -F'load average:' '{ print $2 }' | xargs)"
+# 6. Check if important services are running
+echo "--- SERVICE STATUS ---"
+echo "Checking if important services are running:"
 
-## Memory Stats
-echo -e "${WHITE}\n--- Memory Usage ---${RESET}"
-free -h | awk '/^Mem:/{print "Total RAM: "$2"\nUsed RAM : "$3"\nFree RAM : "$4 }'
-free | awk '/^Mem:/ {printf "Memory Usage: %.2f%%\n", $3/$2*100}'
-free | awk '/^Swap:/ {printf "Swap Usage: %.2f%%\n", $3/$2*100}'
-
-## Disk Usage
-echo -e "${WHITE}\n--- Disk Usage ---${RESET}"
-df -h | grep '^/dev/' | awk '{print $1": "$5" used ("$4" available) mounted on "$6}'
-
-## Top Processes
-echo -e "${WHITE}\n--- Top 5 CPU-consuming Processes ---${RESET}"
-ps -eo pid,cmd,%cpu --sort=-%cpu | head -6
-
-echo -e "${WHITE}\n--- Top 5 Memory-consuming Processes ---${RESET}"
-ps -eo pid,cmd,%mem --sort=-%mem | head -6
-
-## Systemd Failed Services
-echo -e "${WHITE}\n--- Failed System Services ---${RESET}"
-systemctl --failed | awk 'NR>1{print $1,$2,$3,$4}'
-
-## Hardware Health
-echo -e "${WHITE}\n--- Basic Hardware Health ---${RESET}"
-echo -e "Product: $(cat /sys/class/dmi/id/product_name 2>/dev/null)"
-echo -e "Serial:  $(cat /sys/class/dmi/id/product_serial 2>/dev/null)"
-which sensors >/dev/null && sensors | grep 'Core' || echo "sensors not installed/skipped (CPU temp)"
-if [ -b /dev/sda ]; then
-    which smartctl >/dev/null && sudo smartctl -H /dev/sda | grep overall || echo "smartctl not installed/skipped"
+# Check SSH service
+if systemctl is-active --quiet ssh; then
+    echo "SSH service: Running ✓"
+else
+    echo "SSH service: Not running ✗"
 fi
 
-## Network Information
-echo -e "${WHITE}\n--- Network ---${RESET}"
-echo -e "IP(s): $(hostname -I)"
-netstat -i | grep -vE '^Kernel|Iface|lo'
+# Check network service
+if systemctl is-active --quiet networking; then
+    echo "Network service: Running ✓"
+else
+    echo "Network service: Not running ✗"
+fi
+echo ""
 
-## System Logs
-echo -e "${WHITE}\n--- Recent System Errors (syslog/journal) ---${RESET}"
-journalctl -p 3 -xb | tail -10
-dmesg | tail -10
+# 7. Check system temperature (if available)
+echo "--- TEMPERATURE CHECK ---"
+if command -v sensors &> /dev/null; then
+    echo "CPU Temperature:"
+    sensors | grep "Core 0" | awk '{print $3}'
+else
+    echo "Temperature monitoring not available"
+fi
+echo ""
 
-## Log and Alert Option
-echo "Report saved to $log_file"
+# 8. Simple health summary
+echo "--- HEALTH SUMMARY ---"
+
+# Check if CPU usage is high (over 80%)
+cpu_usage=$(top -bn1 | grep "Cpu(s)" | awk '{print $2}' | sed 's/%us,//')
+if (( $(echo "$cpu_usage > 80" | bc -l) )); then
+    echo "⚠️  WARNING: High CPU usage detected!"
+else
+    echo "✅ CPU usage is normal"
+fi
+
+# Check if disk usage is high (over 80%)
+disk_usage=$(df / | grep "/" | awk '{print $5}' | sed 's/%//')
+if [ "$disk_usage" -gt 80 ]; then
+    echo "⚠️  WARNING: Disk space is running low!"
+else
+    echo "✅ Disk space is sufficient"
+fi
+
+# Check if RAM usage is high (over 80%)
+ram_usage=$(free | grep Mem | awk '{printf "%.0f", $3/$2 * 100.0}')
+if [ "$ram_usage" -gt 80 ]; then
+    echo "⚠️  WARNING: High memory usage detected!"
+else
+    echo "✅ Memory usage is normal"
+fi
+
+echo ""
+echo "===================================="
+echo "     HEALTH CHECK COMPLETED"
+echo "===================================="
 
