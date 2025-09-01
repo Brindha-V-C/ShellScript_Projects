@@ -1,7 +1,6 @@
 #!/bin/bash
 
-# Simple System Health Monitor Script for Beginners
-# This script checks basic system information
+# Simple System Health Monitoring Script 
 
 echo "===================================="
 echo "    SYSTEM HEALTH CHECK REPORT"
@@ -42,9 +41,6 @@ echo "--- TOP 3 PROGRAMS USING CPU ---"
 ps aux --sort=-%cpu | head -4 | tail -3 | awk '{print $11 " - " $3 "% CPU"}'
 echo ""
 
-# 6. Check if important services are running
-echo "--- SERVICE STATUS ---"
-echo "Checking if important services are running:"
 
 # Check SSH service
 if systemctl is-active --quiet ssh; then
@@ -61,17 +57,8 @@ else
 fi
 echo ""
 
-# 7. Check system temperature (if available)
-echo "--- TEMPERATURE CHECK ---"
-if command -v sensors &> /dev/null; then
-    echo "CPU Temperature:"
-    sensors | grep "Core 0" | awk '{print $3}'
-else
-    echo "Temperature monitoring not available"
-fi
-echo ""
 
-# 8. Simple health summary
+# 6. Simple health summary
 echo "--- HEALTH SUMMARY ---"
 
 # Check if CPU usage is high (over 80%)
